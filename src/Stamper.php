@@ -20,6 +20,15 @@ class Stamper
     public function __construct()
     {
         $this->expressionLanguage = new ExpressionLanguage();
+        $this->expressionLanguage->register('isset', function ($key) {
+            return "(array_key_exists('$key', \$arguments))";
+        }, function ($arguments, $key) {
+            if (!is_string($key)) {
+                return $key;
+            }
+
+            return array_key_exists($key, $arguments);
+        });
     }
 
     public function registerComponent(string $name, string $path) {

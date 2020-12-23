@@ -1,0 +1,24 @@
+{
+    "name": "icosillion/stamper",
+    "description": "Vue.js-style template engine",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Marcus Lewis",
+            "email": "me@marcuslew.is"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Icosillion\\Stamper\\": "src/"
+        }
+    },
+    "require": {
+        "phpgt/dom": "^2.2",
+        "symfony/expression-language": "^5.2",
+        "spatie/regex": "^1.4",
+        "danielstjules/stringy": "^3.1",
+        "voku/arrayy": "^7.8"
+    }
+}

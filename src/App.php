@@ -6,6 +6,7 @@ use Icosillion\Stamper\Stamper;
 
 $stamper = new Stamper();
 $stamper->registerComponent('warning', __DIR__ . '/../templates/warning.html');
+$stamper->registerComponent('footer', __DIR__ . '/../templates/footer.html');
 
 $output = $stamper->render(__DIR__ . '/../templates/component.html', [
     'person' => [

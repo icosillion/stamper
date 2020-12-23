@@ -9,6 +9,10 @@
             This person is a minor
         </warning>
 
+        <warning data-type="warn" s-else>
+            This person is an adult
+        </warning>
+
         <div s-if="isset('test')">Test</div>
         <div s-else>No Test</div>
 
@@ -19,6 +23,10 @@
         <ul>
             <li s-for="person.hobbies as hobby">{{hobby}}</li>
         </ul>
+
+        <div>
+            Mixed text {{person.name}} <b>and nodes</b>
+        </div>
     </div>
 </template>
 

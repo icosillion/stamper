@@ -16,6 +16,7 @@
         }
     },
     "require": {
+        "php": ">=7.4",
         "phpgt/dom": "^2.2",
         "symfony/expression-language": "^5.2",
         "spatie/regex": "^1.4",

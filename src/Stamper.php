@@ -5,10 +5,12 @@ namespace Icosillion\Stamper;
 
 
 use Arrayy\Arrayy;
+use Gt\Dom\Document;
 use Gt\Dom\Element;
 use Gt\Dom\HTMLCollection;
 use Gt\Dom\HTMLDocument;
 use Spatie\Regex\Regex;
+use Symfony\Component\ExpressionLanguage\ExpressionFunction;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
 use function Stringy\create as s;
 
@@ -16,6 +18,7 @@ class Stamper
 {
     private ExpressionLanguage $expressionLanguage;
     private array $componentRegistry = [];
+    private $lastResult;
 
     public function __construct()
     {
@@ -29,6 +32,8 @@ class Stamper
 
             return array_key_exists($key, $arguments);
         });
+        $countFn = ExpressionFunction::fromPhp('count');
+        $this->expressionLanguage->register('count', $countFn->getCompiler(), $countFn->getEvaluator());
     }
 
     public function registerComponent(string $name, string $path) {
@@ -67,38 +72,75 @@ class Stamper
         return $context;
     }
 
-    private function walkNode(Element $node, array $context, HTMLDocument $doc) {
+    private function walkNode(?Element $node, array $context, HTMLDocument $doc) {
+
         // Check if we're trying to render a custom component
-        if (array_key_exists($node->tagName, $this->componentRegistry)) {
-            // TODO Support if / for / interpolation
-
-            // Interpolate Attrs
-            $this->interpolateAttrs($node, $context);
-
-            // Get Props
-            $props = [];
-            foreach ($node->attributes as $attribute) {
-                if (s($attribute->name)->startsWith('data-')) {
-                    $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value; // TODO evaluate value
-                }
-            }
-
-            // Get Children
-            $children = count($node->children) === 0 ? $node->textContent : $node->children;
-
-            // Load Component
-            $output = $this->render($this->componentRegistry[$node->tagName], [
-                'props' => $props,
-                'children' => $children
-            ]);
-
-            return (new Adopter())->adopt($doc, $output['node']);
-        }
+        $node = $this->apply($node, $context, $doc, [$this, 'handleCustomComponent']);
 
         // Handle if constructs
+        $node = $this->apply($node, $context, $doc, [$this, 'handleIf']);
+
+        // Handle else constructs
+        $node = $this->apply($node, $context, $doc, [$this, 'handleElse']);
+
+        // Handle for constructs
+        $node = $this->apply($node, $context, $doc, [$this, 'handleFor']);
+
+        // Interpolate Attrs
+        $node = $this->apply($node, $context, $doc, [$this, 'handleInterpolateAttrs']);
+
+        // Handle Text content
+        $node = $this->apply($node, $context, $doc, [$this, 'handleTextContent']);
+
+        // Handle children
+        $node = $this->apply($node, $context, $doc, [$this, 'handleChildren']);
+
+        return $node;
+    }
+
+    private function interpolateText(string $text, array $context): string {
+        $match = Regex::matchAll('/{{(.*)}}/', $text);
+        if ($match->hasMatch()) {
+            foreach ($match->results() as $result) {
+                $expression = $result->group(1);
+
+                $replacement = $this->expressionLanguage->evaluate($expression, $context);
+                $text = (string) s($text)->replace($result->result(), $replacement);
+            }
+        }
+
+        return $text;
+    }
+
+    private function apply($input, array $context, Document $doc, callable $function) {
+        if ($input === null) {
+            return null;
+        }
+
+        if (is_array($input)) {
+            return array_map(function ($item) use ($function, $context, $doc) {
+                return $function($item, $context, $doc);
+            }, $input);
+        }
+
+        return $function($input, $context, $doc);
+    }
+
+    private function handleInterpolateAttrs(Element $node, array $context, Document $doc) {
+        foreach ($node->attributes as $attr) {
+            if (!s($attr->name)->startsWith('s-')) {
+                $attr->value = $this->interpolateText($attr->value, $context);
+            }
+        }
+
+        return $node;
+    }
+
+    private function handleIf(Element $node, array $context, Document $doc) {
         $ifAttribute = $node->getAttribute('s-if');
         if ($ifAttribute) {
-            if ($this->expressionLanguage->evaluate($ifAttribute, $context)) {
+            $this->lastResult = $this->expressionLanguage->evaluate($ifAttribute, $context);
+            if ($this->lastResult) {
                 $node->removeAttribute('s-if');
                 return $node;
             }
@@ -106,7 +148,20 @@ class Stamper
             return null;
         }
 
-        // Handle for constructs
+        return $node;
+    }
+
+    private function handleElse(Element $node, array $context, Document $doc) {
+        $elseAttribute = $node->hasAttribute('s-else');
+        if ($elseAttribute) {
+            $node->removeAttribute('s-else');
+            return $this->lastResult ? null : $node;
+        }
+
+        return $node;
+    }
+
+    private function handleFor(Element $node, array $context, Document $doc) {
         $forAttribute = $node->getAttribute('s-for');
         if ($forAttribute) {
             $match = Regex::matchAll('/(.*)\bas\b(.*)$/', $forAttribute);
@@ -131,14 +186,15 @@ class Stamper
             return $outputNodes;
         }
 
-        // Interpolate Attrs
-        $this->interpolateAttrs($node, $context);
+        return $node;
+    }
 
-        // Handle Text content
+    // TODO Fix this
+    private function handleTextContent(Element $node, array $context, Document $doc) {
         if (count($node->children) === 0) {
             $text = $node->textContent;
             if ($text !== '') {
-                $match = Regex::matchAll('/{{(.*)}}/', $text);
+                $match = Regex::matchAll('/{{(.*?)}}/', $text);
                 if ($match->hasMatch()) {
                     foreach ($match->results() as $result) {
                         $expression = $result->group(1);
@@ -160,7 +216,10 @@ class Stamper
             }
         }
 
-        // Handle children
+        return $node;
+    }
+
+    private function handleChildren(Element $node, array $context, Document $doc) {
         if ($node->hasChildNodes()) {
             foreach ($node->children as $child) {
                 $newChild = $child->cloneNode(true);
@@ -183,25 +242,33 @@ class Stamper
         return $node;
     }
 
-    private function interpolateAttrs(Element $element, array $context) {
-        foreach ($element->attributes as $attr) {
-            if (!s($attr->name)->startsWith('s-')) {
-                $attr->value = $this->interpolateText($attr->value, $context);
+    private function handleCustomComponent(Element $node, array $context, Document $doc) {
+        if (array_key_exists($node->tagName, $this->componentRegistry)) {
+            // TODO Support if / for / interpolation
+
+            // Interpolate Attrs
+            $this->handleInterpolateAttrs($node, $context, $doc);
+
+            // Get Props
+            $props = [];
+            foreach ($node->attributes as $attribute) {
+                if (s($attribute->name)->startsWith('data-')) {
+                    $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value; // TODO evaluate value
+                }
             }
+
+            // Get Children
+            $children = count($node->children) === 0 ? $node->textContent : $node->children;
+
+            // Load Component
+            $output = $this->render($this->componentRegistry[$node->tagName], [
+                'props' => $props,
+                'children' => $children
+            ]);
+
+            return (new Adopter())->adopt($doc, $output['node']);
         }
-    }
 
-    private function interpolateText(string $text, array $context): string {
-        $match = Regex::matchAll('/{{(.*)}}/', $text);
-        if ($match->hasMatch()) {
-            foreach ($match->results() as $result) {
-                $expression = $result->group(1);
-
-                $replacement = $this->expressionLanguage->evaluate($expression, $context);
-                $text = (string) s($text)->replace($result->result(), $replacement);
-            }
-        }
-
-        return $text;
+        return $node;
     }
 }

@@ -15,8 +15,7 @@ $output = $stamper->render(__DIR__ . '/../templates/component.html', [
             'programming',
             'art'
         ]
-    ],
-    'test' => 'hello'
+    ]
 ]);
 
 echo $output['html'];

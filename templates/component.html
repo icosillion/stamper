@@ -1,6 +1,6 @@
 <template>
     <div>
-        <h1>{{person["name"]}}</h1>
+        <h1>{{person.name}}</h1>
 
         <div s-if="person.age < 18">Child</div>
         <div s-if="person.age >= 18">Adult</div>
@@ -9,8 +9,11 @@
             This person is a minor
         </warning>
 
-        <div s-if="isset('test')">
-            Test
+        <div s-if="isset('test')">Test</div>
+        <div s-else>No Test</div>
+
+        <div>
+            {{person.name}} has {{count(person.hobbies)}} {{count(person.hobbies) == 1 ? 'hobby' : 'hobbies'}}
         </div>
 
         <ul>

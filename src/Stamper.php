@@ -72,7 +72,7 @@ class Stamper
             $templateNode = $node->cloneNode(true);
             $templateNode->removeAttribute('s-for');
             foreach ($collection as $item) {
-                $outputNodes[] = $this->walkNode($templateNode, array_merge($context, [$variable => $item]));
+                $outputNodes[] = $this->walkNode($templateNode->cloneNode(true), array_merge($context, [$variable => $item]));
             }
 
             return $outputNodes;

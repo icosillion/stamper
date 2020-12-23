@@ -53,7 +53,7 @@ class Stamper
             $styleBucket->setStyle($path, $style[0]->innerText);
         }
 
-        $output = $this->walkNode($template, $this->wrapContext($context), $document);
+        $output = $this->walkNode($template, new State($this->wrapContext($context), $document, $styleBucket));
 
         return [
             'html' => $output->innerHTML,
@@ -72,28 +72,28 @@ class Stamper
         return $context;
     }
 
-    private function walkNode(?Element $node, array $context, HTMLDocument $doc) {
+    private function walkNode(?Element $node, State $state) {
 
         // Check if we're trying to render a custom component
-        $node = $this->apply($node, $context, $doc, [$this, 'handleCustomComponent']);
+        $node = $this->apply($node, $state, [$this, 'handleCustomComponent']);
 
         // Handle if constructs
-        $node = $this->apply($node, $context, $doc, [$this, 'handleIf']);
+        $node = $this->apply($node, $state, [$this, 'handleIf']);
 
         // Handle else constructs
-        $node = $this->apply($node, $context, $doc, [$this, 'handleElse']);
+        $node = $this->apply($node, $state, [$this, 'handleElse']);
 
         // Handle for constructs
-        $node = $this->apply($node, $context, $doc, [$this, 'handleFor']);
+        $node = $this->apply($node, $state, [$this, 'handleFor']);
 
         // Interpolate Attrs
-        $node = $this->apply($node, $context, $doc, [$this, 'handleInterpolateAttrs']);
+        $node = $this->apply($node, $state, [$this, 'handleInterpolateAttrs']);
 
         // Handle Text content
-        $node = $this->apply($node, $context, $doc, [$this, 'handleTextContent']);
+        $node = $this->apply($node, $state, [$this, 'handleTextContent']);
 
         // Handle children
-        $node = $this->apply($node, $context, $doc, [$this, 'handleChildren']);
+        $node = $this->apply($node, $state, [$this, 'handleChildren']);
 
         return $node;
     }
@@ -112,34 +112,34 @@ class Stamper
         return $text;
     }
 
-    private function apply($input, array $context, Document $doc, callable $function) {
+    private function apply($input, State $state, callable $function) {
         if ($input === null) {
             return null;
         }
 
         if (is_array($input)) {
-            return array_map(function ($item) use ($function, $context, $doc) {
-                return $function($item, $context, $doc);
+            return array_map(function ($item) use ($function, $state) {
+                return $function($item, $state);
             }, $input);
         }
 
-        return $function($input, $context, $doc);
+        return $function($input, $state);
     }
 
-    private function handleInterpolateAttrs(Element $node, array $context, Document $doc) {
+    private function handleInterpolateAttrs(Element $node, State $state) {
         foreach ($node->attributes as $attr) {
             if (!s($attr->name)->startsWith('s-')) {
-                $attr->value = $this->interpolateText($attr->value, $context);
+                $attr->value = $this->interpolateText($attr->value, $state->context);
             }
         }
 
         return $node;
     }
 
-    private function handleIf(Element $node, array $context, Document $doc) {
+    private function handleIf(Element $node, State $state) {
         $ifAttribute = $node->getAttribute('s-if');
         if ($ifAttribute) {
-            $this->lastResult = $this->expressionLanguage->evaluate($ifAttribute, $context);
+            $this->lastResult = $this->expressionLanguage->evaluate($ifAttribute, $state->context);
             if ($this->lastResult) {
                 $node->removeAttribute('s-if');
                 return $node;
@@ -151,7 +151,7 @@ class Stamper
         return $node;
     }
 
-    private function handleElse(Element $node, array $context, Document $doc) {
+    private function handleElse(Element $node, State $state) {
         $elseAttribute = $node->hasAttribute('s-else');
         if ($elseAttribute) {
             $node->removeAttribute('s-else');
@@ -161,7 +161,7 @@ class Stamper
         return $node;
     }
 
-    private function handleFor(Element $node, array $context, Document $doc) {
+    private function handleFor(Element $node, State $state) {
         $forAttribute = $node->getAttribute('s-for');
         if ($forAttribute) {
             $match = Regex::matchAll('/(.*)\bas\b(.*)$/', $forAttribute);
@@ -175,12 +175,15 @@ class Stamper
             $variable = trim($result->group(2));
             $expression = trim($result->group(1));
 
-            $collection = $this->expressionLanguage->evaluate($expression, $context);
+            $collection = $this->expressionLanguage->evaluate($expression, $state->context);
             $outputNodes = [];
             $templateNode = $node->cloneNode(true);
             $templateNode->removeAttribute('s-for');
             foreach ($collection as $item) {
-                $outputNodes[] = $this->walkNode($templateNode->cloneNode(true), array_merge($context, [$variable => $item]), $doc);
+                $outputNodes[] = $this->walkNode(
+                    $templateNode->cloneNode(true),
+                    $state->withAdditionalContext([$variable => $item])
+                );
             }
 
             return $outputNodes;
@@ -189,8 +192,7 @@ class Stamper
         return $node;
     }
 
-    // TODO Fix this
-    private function handleTextContent(Element $node, array $context, Document $doc) {
+    private function handleTextContent(Element $node, State $state) {
         if (count($node->children) === 0) {
             $text = $node->textContent;
             if ($text !== '') {
@@ -199,11 +201,11 @@ class Stamper
                     foreach ($match->results() as $result) {
                         $expression = $result->group(1);
 
-                        $replacement = $this->expressionLanguage->evaluate($expression, $context);
+                        $replacement = $this->expressionLanguage->evaluate($expression, $state->context);
                         if ($replacement instanceof HTMLCollection) {
                             $node->textContent = '';
                             foreach ($replacement as $child) {
-                                $childClone = (new Adopter())->adopt($doc, $child);
+                                $childClone = (new Adopter())->adopt($state->doc, $child);
                                 $node->appendChild($childClone);
                             }
                         } else {
@@ -219,11 +221,11 @@ class Stamper
         return $node;
     }
 
-    private function handleChildren(Element $node, array $context, Document $doc) {
+    private function handleChildren(Element $node, State $state) {
         if ($node->hasChildNodes()) {
             foreach ($node->children as $child) {
                 $newChild = $child->cloneNode(true);
-                $newChild = $this->walkNode($newChild, $context, $doc);
+                $newChild = $this->walkNode($newChild, $state);
 
                 if ($newChild === null) {
                     $node->removeChild($child);
@@ -242,26 +244,26 @@ class Stamper
         return $node;
     }
 
-    private function handleCustomComponent(Element $node, array $context, Document $doc) {
+    private function handleCustomComponent(Element $node, State $state) {
         if (array_key_exists($node->tagName, $this->componentRegistry)) {
             // Handle for
-            $node = $this->apply($node, $context, $doc, [$this, 'handleFor']);
+            $node = $this->apply($node, $state, [$this, 'handleFor']);
 
             // Interpolate non-data Attrs
-            $node = $this->apply($node, $context, $doc, [$this, 'handleInterpolateAttrs']);
+            $node = $this->apply($node, $state, [$this, 'handleInterpolateAttrs']);
 
             // Handle If
-            $node = $this->apply($node, $context, $doc, [$this, 'handleIf']);
+            $node = $this->apply($node, $state, [$this, 'handleIf']);
 
             // Handle Else
-            $node = $this->apply($node, $context, $doc, [$this, 'handleElse']);
+            $node = $this->apply($node, $state, [$this, 'handleElse']);
 
-            return $this->apply($node, $context, $doc, function ($node, $context, $doc) {
+            return $this->apply($node, $state, function ($node, $state) {
                 // Get Props
                 $props = [];
                 foreach ($node->attributes as $attribute) {
                     if (s($attribute->name)->startsWith('data-s-')) {
-                        $props[(string) s($attribute->name)->removeLeft('data-s-')] = $this->expressionLanguage->evaluate($attribute->value, $context);
+                        $props[(string) s($attribute->name)->removeLeft('data-s-')] = $this->expressionLanguage->evaluate($attribute->value, $state->context);
                     } else {
                         $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value;
                     }
@@ -275,9 +277,9 @@ class Stamper
                     $output = $this->render($this->componentRegistry[$node->tagName], [
                         'props' => $props,
                         'children' => $children
-                    ]);
+                    ], $state->styleBucket);
 
-                    return (new Adopter())->adopt($doc, $output['node']);
+                    return (new Adopter())->adopt($state->doc, $output['node']);
                 }
 
                 return $node;

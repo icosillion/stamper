@@ -28,6 +28,8 @@
             Mixed text {{person.name}} <b>and nodes</b>
         </div>
 
+        <warning s-for="person.hobbies as hobby" data-type="warn">{{hobby}}</warning>
+
         <obj data-s-object="object"></obj>
 
         <footer data-bold="test text"></footer>

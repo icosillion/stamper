@@ -244,7 +244,10 @@ class Stamper
 
     private function handleCustomComponent(Element $node, array $context, Document $doc) {
         if (array_key_exists($node->tagName, $this->componentRegistry)) {
-            // Interpolate Attrs
+            // Handle for
+            $node = $this->apply($node, $context, $doc, [$this, 'handleFor']);
+
+            // Interpolate non-data Attrs
             $node = $this->apply($node, $context, $doc, [$this, 'handleInterpolateAttrs']);
 
             // Handle If
@@ -253,32 +256,32 @@ class Stamper
             // Handle Else
             $node = $this->apply($node, $context, $doc, [$this, 'handleElse']);
 
-            // TODO Handle for
-
-            if ($node === null) {
-                return null;
-            }
-
-            // Get Props
-            $props = [];
-            foreach ($node->attributes as $attribute) {
-                if (s($attribute->name)->startsWith('data-s-')) {
-                    $props[(string) s($attribute->name)->removeLeft('data-s-')] = $this->expressionLanguage->evaluate($attribute->value, $context);
-                } else {
-                    $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value;
+            return $this->apply($node, $context, $doc, function ($node, $context, $doc) {
+                // Get Props
+                $props = [];
+                foreach ($node->attributes as $attribute) {
+                    if (s($attribute->name)->startsWith('data-s-')) {
+                        $props[(string) s($attribute->name)->removeLeft('data-s-')] = $this->expressionLanguage->evaluate($attribute->value, $context);
+                    } else {
+                        $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value;
+                    }
                 }
-            }
 
-            // Get Children
-            $children = count($node->children) === 0 ? $node->textContent : $node->children;
+                // Get Children
+                $children = count($node->children) === 0 ? $node->textContent : $node->children;
 
-            // Load Component
-            $output = $this->render($this->componentRegistry[$node->tagName], [
-                'props' => $props,
-                'children' => $children
-            ]);
+                // Load Component
+                if (array_key_exists($node->tagName, $this->componentRegistry)) {
+                    $output = $this->render($this->componentRegistry[$node->tagName], [
+                        'props' => $props,
+                        'children' => $children
+                    ]);
 
-            return (new Adopter())->adopt($doc, $output['node']);
+                    return (new Adopter())->adopt($doc, $output['node']);
+                }
+
+                return $node;
+            });
         }
 
         return $node;

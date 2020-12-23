@@ -75,3 +75,20 @@ $stamper->registerComponent('warning', __DIR__ . '/warning.html');
     }
 </style>
 ```
+
+### Component props
+
+In Stamper there are two different types of props `data-` props and `data-s` props.
+`data-` props just contain strings and nothing else. They behave exactly as you would
+expect a data prop to behave. On the other hand `data-s-` props support code and
+passing around expressions. Any property that has an `s-` prefix supports code within
+stamper.
+
+### Expression language
+
+Stamper uses Symfony's [Expression Language](https://symfony.com/doc/current/components/expression_language.html)
+for evaluating code within your templates. It also has a few extension methods that you
+can use in your templates:
+
+* `isset('variable')`
+* `count(variable)`

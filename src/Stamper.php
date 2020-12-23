@@ -244,10 +244,20 @@ class Stamper
 
     private function handleCustomComponent(Element $node, array $context, Document $doc) {
         if (array_key_exists($node->tagName, $this->componentRegistry)) {
-            // TODO Support if / for / interpolation
-
             // Interpolate Attrs
-            $this->handleInterpolateAttrs($node, $context, $doc);
+            $node = $this->apply($node, $context, $doc, [$this, 'handleInterpolateAttrs']);
+
+            // Handle If
+            $node = $this->apply($node, $context, $doc, [$this, 'handleIf']);
+
+            // Handle Else
+            $node = $this->apply($node, $context, $doc, [$this, 'handleElse']);
+
+            // TODO Handle for
+
+            if ($node === null) {
+                return null;
+            }
 
             // Get Props
             $props = [];

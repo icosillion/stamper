@@ -5,7 +5,7 @@
         <div s-if="person.age < 18">Child</div>
         <div s-if="person.age >= 18">Adult</div>
 
-        <warning data-type="error">
+        <warning data-type="error" s-if="person.age < 18">
             This person is a minor
         </warning>
 

@@ -262,8 +262,10 @@ class Stamper
             // Get Props
             $props = [];
             foreach ($node->attributes as $attribute) {
-                if (s($attribute->name)->startsWith('data-')) {
-                    $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value; // TODO evaluate value
+                if (s($attribute->name)->startsWith('data-s-')) {
+                    $props[(string) s($attribute->name)->removeLeft('data-s-')] = $this->expressionLanguage->evaluate($attribute->value, $context);
+                } else {
+                    $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value;
                 }
             }
 

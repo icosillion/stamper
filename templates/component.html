@@ -5,6 +5,10 @@
         <div s-if="person.age < 18">Child</div>
         <div s-if="person.age >= 18">Adult</div>
 
+        <warning data-type="error">
+            This person is a minor
+        </warning>
+
         <ul>
             <li s-for="person.hobbies as hobby">{{hobby}}</li>
         </ul>

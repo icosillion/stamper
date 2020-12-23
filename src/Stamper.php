@@ -6,6 +6,7 @@ namespace Icosillion\Stamper;
 
 use Arrayy\Arrayy;
 use Gt\Dom\Element;
+use Gt\Dom\HTMLCollection;
 use Gt\Dom\HTMLDocument;
 use Spatie\Regex\Regex;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
@@ -14,10 +15,15 @@ use function Stringy\create as s;
 class Stamper
 {
     private ExpressionLanguage $expressionLanguage;
+    private array $componentRegistry = [];
 
     public function __construct()
     {
         $this->expressionLanguage = new ExpressionLanguage();
+    }
+
+    public function registerComponent(string $name, string $path) {
+        $this->componentRegistry[$name] = $path;
     }
 
     public function render(string $path, $context = []) {
@@ -26,9 +32,13 @@ class Stamper
         $template = $document->getElementsByTagName('template')[0];
         $style = $document->getElementsByTagName('style')[0];
 
-        $output = $this->walkNode($template, $this->wrapContext($context));
+        $output = $this->walkNode($template, $this->wrapContext($context), $document);
 
-        return $output->innerHTML;
+        return [
+            'html' => $output->innerHTML,
+            'node' => $output->children[0],
+            'style' => $style->value
+        ];
     }
 
     private function wrapContext(array $context) {
@@ -41,7 +51,31 @@ class Stamper
         return $context;
     }
 
-    private function walkNode(Element $node, array $context) {
+    private function walkNode(Element $node, array $context, HTMLDocument $doc) {
+        // Check if we're trying to render a custom component
+        if (array_key_exists($node->tagName, $this->componentRegistry)) {
+            // TODO Support if / for / interpolation
+
+            // Get Props
+            $props = [];
+            foreach ($node->attributes as $attribute) {
+                if (s($attribute->name)->startsWith('data-')) {
+                    $props[$attribute->name] = $attribute->value; // TODO evaluate value
+                }
+            }
+
+            // Get Children
+            $children = $node->children;
+
+            // Load Component
+            $output = $this->render($this->componentRegistry[$node->tagName], [
+                'props' => $props,
+                'children' => $children
+            ]);
+
+            return (new Adopter())->adopt($doc, $output['node']);
+        }
+
         // Handle if constructs
         $ifAttribute = $node->getAttribute('s-if');
         if ($ifAttribute) {
@@ -72,7 +106,7 @@ class Stamper
             $templateNode = $node->cloneNode(true);
             $templateNode->removeAttribute('s-for');
             foreach ($collection as $item) {
-                $outputNodes[] = $this->walkNode($templateNode->cloneNode(true), array_merge($context, [$variable => $item]));
+                $outputNodes[] = $this->walkNode($templateNode->cloneNode(true), array_merge($context, [$variable => $item]), $doc);
             }
 
             return $outputNodes;
@@ -87,7 +121,16 @@ class Stamper
                     foreach ($match->results() as $result) {
                         $expression = $result->group(1);
 
-                        $text = (string) s($text)->replace($result->result(), $this->expressionLanguage->evaluate($expression, $context));
+                        $replacement = $this->expressionLanguage->evaluate($expression, $context);
+                        if ($replacement instanceof HTMLCollection) {
+                            $node->textContent = '';
+                            foreach ($replacement as $child) {
+                                $childClone = (new Adopter())->adopt($doc, $child);
+                                $node->appendChild($childClone);
+                            }
+                        } else {
+                            $text = (string) s($text)->replace($result->result(), $replacement);
+                        }
                     }
                 }
 
@@ -99,7 +142,7 @@ class Stamper
         if ($node->hasChildNodes()) {
             foreach ($node->children as $child) {
                 $newChild = $child->cloneNode(true);
-                $newChild = $this->walkNode($newChild, $context);
+                $newChild = $this->walkNode($newChild, $context, $doc);
 
                 if ($newChild === null) {
                     $node->removeChild($child);

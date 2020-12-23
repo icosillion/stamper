@@ -1,0 +1,15 @@
+<template>
+    <div class="warning {{props.type}}">
+        {{children}}
+    </div>
+</template>
+
+<style>
+.warning {
+    background: yellow;
+}
+
+.warning.error {
+    background: red;
+}
+</style>

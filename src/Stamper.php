@@ -26,18 +26,25 @@ class Stamper
         $this->componentRegistry[$name] = $path;
     }
 
-    public function render(string $path, $context = []) {
+    public function render(string $path, $context = [], StyleBucket $styleBucket = null) {
+        if ($styleBucket === null) {
+            $styleBucket = new StyleBucket();
+        }
+
         $document = new HTMLDocument(file_get_contents($path));
 
         $template = $document->getElementsByTagName('template')[0];
-        $style = $document->getElementsByTagName('style')[0];
+        $style = $document->getElementsByTagName('style');
+        if (count($style) !== 0) {
+            $styleBucket->setStyle($path, $style[0]->innerText);
+        }
 
         $output = $this->walkNode($template, $this->wrapContext($context), $document);
 
         return [
             'html' => $output->innerHTML,
             'node' => $output->children[0],
-            'style' => $style->value
+            'stylesheet' => $styleBucket->buildStyleSheet()
         ];
     }
 
@@ -56,16 +63,19 @@ class Stamper
         if (array_key_exists($node->tagName, $this->componentRegistry)) {
             // TODO Support if / for / interpolation
 
+            // Interpolate Attrs
+            $this->interpolateAttrs($node, $context);
+
             // Get Props
             $props = [];
             foreach ($node->attributes as $attribute) {
                 if (s($attribute->name)->startsWith('data-')) {
-                    $props[$attribute->name] = $attribute->value; // TODO evaluate value
+                    $props[(string) s($attribute->name)->removeLeft('data-')] = $attribute->value; // TODO evaluate value
                 }
             }
 
             // Get Children
-            $children = $node->children;
+            $children = count($node->children) === 0 ? $node->textContent : $node->children;
 
             // Load Component
             $output = $this->render($this->componentRegistry[$node->tagName], [
@@ -111,6 +121,9 @@ class Stamper
 
             return $outputNodes;
         }
+
+        // Interpolate Attrs
+        $this->interpolateAttrs($node, $context);
 
         // Handle Text content
         if (count($node->children) === 0) {
@@ -159,5 +172,27 @@ class Stamper
         }
 
         return $node;
+    }
+
+    private function interpolateAttrs(Element $element, array $context) {
+        foreach ($element->attributes as $attr) {
+            if (!s($attr->name)->startsWith('s-')) {
+                $attr->value = $this->interpolateText($attr->value, $context);
+            }
+        }
+    }
+
+    private function interpolateText(string $text, array $context): string {
+        $match = Regex::matchAll('/{{(.*)}}/', $text);
+        if ($match->hasMatch()) {
+            foreach ($match->results() as $result) {
+                $expression = $result->group(1);
+
+                $replacement = $this->expressionLanguage->evaluate($expression, $context);
+                $text = (string) s($text)->replace($result->result(), $replacement);
+            }
+        }
+
+        return $text;
     }
 }

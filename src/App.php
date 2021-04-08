@@ -30,3 +30,5 @@ $output = $stamper->render(__DIR__ . '/../templates/component.html', [
 echo $output['html'];
 
 echo $output['stylesheet'];
+
+var_dump($output['globals']);

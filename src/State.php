@@ -4,7 +4,6 @@
 namespace Icosillion\Stamper;
 
 
-use DeepCopy\DeepCopy;
 use Gt\Dom\Document;
 
 class State

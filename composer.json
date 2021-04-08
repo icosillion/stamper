@@ -3,7 +3,7 @@
     "description": "Vue.js-style template engine",
     "type": "library",
     "license": "MIT",
-    "version": "0.5.1",
+    "version": "0.6.0",
     "authors": [
         {
             "name": "Marcus Lewis",
@@ -16,7 +16,7 @@
         }
     },
     "require": {
-        "php": ">=7.4",
+        "php": ">=8.0",
         "phpgt/dom": "^2.2",
         "symfony/expression-language": "^5.2",
         "spatie/regex": "^1.4",

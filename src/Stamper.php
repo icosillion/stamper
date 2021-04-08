@@ -5,7 +5,6 @@ namespace Icosillion\Stamper;
 
 
 use Arrayy\Arrayy;
-use Gt\Dom\Document;
 use Gt\Dom\Element;
 use Gt\Dom\HTMLCollection;
 use Gt\Dom\HTMLDocument;
@@ -40,9 +39,13 @@ class Stamper
         $this->componentRegistry[$name] = $path;
     }
 
-    public function render(string $path, $context = [], StyleBucket $styleBucket = null) {
+    public function render(string $path, $context = [], StyleBucket $styleBucket = null, GlobalsBucket $globalsBucket = null) {
         if ($styleBucket === null) {
             $styleBucket = new StyleBucket();
+        }
+        
+        if ($globalsBucket === null) {
+            $globalsBucket = new GlobalsBucket();
         }
 
         $document = new HTMLDocument(file_get_contents($path));
@@ -53,12 +56,23 @@ class Stamper
             $styleBucket->setStyle($path, $style[0]->innerText);
         }
 
+        $config = $document->getElementsByTagName('config');
+        if (count($config) !== 0) {
+            // TODO: Don't use eval?
+            $configData = eval("return " . $config[0]->innerText . ";");
+
+            if (array_key_exists('globals', $configData)) {
+                $globalsBucket->pushGlobals($configData['globals']);
+            }
+        }
+
         $output = $this->walkNode($template, new State($this->wrapContext($context), $document, $styleBucket));
 
         return [
             'html' => $output->innerHTML,
             'node' => $output->children[0],
-            'stylesheet' => $styleBucket->buildStyleSheet()
+            'stylesheet' => $styleBucket->buildStyleSheet(),
+            'globals' => $globalsBucket->getGlobals()
         ];
     }
 

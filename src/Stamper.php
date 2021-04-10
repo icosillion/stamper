@@ -115,8 +115,6 @@ class Stamper
     }
 
     private function walkNode(?Element $node, State $state) {
-        echo "Processing node " . $node->tagName . "\n";
-
         // Check if we're trying to render a custom component
         $node = $this->apply($node, $state, [$this, 'handleCustomComponent']);
 

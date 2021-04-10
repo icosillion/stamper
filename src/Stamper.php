@@ -173,7 +173,7 @@ class Stamper
     private function handleBooleanAttrs(Element $node, State $state) {
         foreach ($node->attributes as $attr) {
             if (in_array($attr->name, BOOLEAN_ATTRIBUTES)) {
-                if ($attr->value === 'false') {
+                if ($this->interpolateText($attr->value, $state->context) === 'false') {
                     $node->removeAttribute($attr->name);
                 }
             }

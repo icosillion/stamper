@@ -8,6 +8,7 @@ $stamper = new Stamper();
 $stamper->registerComponent('warning', __DIR__ . '/../templates/warning.html');
 $stamper->registerComponent('footer', __DIR__ . '/../templates/footer.html');
 $stamper->registerComponent('obj', __DIR__ . '/../templates/object.html');
+$stamper->registerComponent('radiobox' , __DIR__ . '/../templates/radiobox.html');
 
 class Obj {
     public function getId() {

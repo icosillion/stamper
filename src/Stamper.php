@@ -13,6 +13,34 @@ use Symfony\Component\ExpressionLanguage\ExpressionFunction;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
 use function Stringy\create as s;
 
+const BOOLEAN_ATTRIBUTES = [
+    "allowfullscreen",
+    "allowpaymentrequest",
+    "async",
+    "autofocus",
+    "autoplay",
+    "checked",
+    "controls",
+    "default",
+    "disabled",
+    "formnovalidate",
+    "hidden",
+    "ismap",
+    "itemscope",
+    "loop",
+    "multiple",
+    "muted",
+    "nomodule",
+    "novalidate",
+    "open",
+    "playsinline",
+    "readonly",
+    "required",
+    "reversed",
+    "selected",
+    "truespeed"
+];
+
 class Stamper
 {
     private ExpressionLanguage $expressionLanguage;
@@ -87,6 +115,7 @@ class Stamper
     }
 
     private function walkNode(?Element $node, State $state) {
+        echo "Processing node " . $node->tagName . "\n";
 
         // Check if we're trying to render a custom component
         $node = $this->apply($node, $state, [$this, 'handleCustomComponent']);
@@ -99,6 +128,9 @@ class Stamper
 
         // Handle for constructs
         $node = $this->apply($node, $state, [$this, 'handleFor']);
+
+        // Handle boolean attrs
+        $node = $this->apply($node, $state, [$this, 'handleBooleanAttrs']);
 
         // Interpolate Attrs
         $node = $this->apply($node, $state, [$this, 'handleInterpolateAttrs']);
@@ -138,6 +170,18 @@ class Stamper
         }
 
         return $function($input, $state);
+    }
+
+    private function handleBooleanAttrs(Element $node, State $state) {
+        foreach ($node->attributes as $attr) {
+            if (in_array($attr->name, BOOLEAN_ATTRIBUTES)) {
+                if ($attr->value === 'false') {
+                    $node->removeAttribute($attr->name);
+                }
+            }
+        }
+
+        return $node;
     }
 
     private function handleInterpolateAttrs(Element $node, State $state) {
@@ -262,6 +306,9 @@ class Stamper
         if (array_key_exists($node->tagName, $this->componentRegistry)) {
             // Handle for
             $node = $this->apply($node, $state, [$this, 'handleFor']);
+
+            // Handle boolean attrs
+            $node = $this->apply($node, $state, [$this, 'handleBooleanAttrs']);
 
             // Interpolate non-data Attrs
             $node = $this->apply($node, $state, [$this, 'handleInterpolateAttrs']);

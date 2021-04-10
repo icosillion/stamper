@@ -3,7 +3,7 @@
     "description": "Vue.js-style template engine",
     "type": "library",
     "license": "MIT",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "authors": [
         {
             "name": "Marcus Lewis",

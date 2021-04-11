@@ -67,13 +67,9 @@ class Stamper
         $this->componentRegistry[$name] = $path;
     }
 
-    public function render(string $path, $context = [], StyleBucket $styleBucket = null, GlobalsBucket $globalsBucket = null) {
-        if ($styleBucket === null) {
-            $styleBucket = new StyleBucket();
-        }
-        
-        if ($globalsBucket === null) {
-            $globalsBucket = new GlobalsBucket();
+    public function render(string $path, $context = [], Buckets $buckets = null) {
+        if ($buckets === null) {
+            $buckets = new Buckets();
         }
 
         $document = new HTMLDocument(file_get_contents($path));
@@ -81,7 +77,7 @@ class Stamper
         $template = $document->getElementsByTagName('template')[0];
         $style = $document->getElementsByTagName('style');
         if (count($style) !== 0) {
-            $styleBucket->setStyle($path, $style[0]->innerText);
+            $buckets->getStyleBucket()->setFragment($path, $style[0]->innerText);
         }
 
         $config = $document->getElementsByTagName('config');
@@ -90,17 +86,18 @@ class Stamper
             $configData = eval("return " . $config[0]->innerText . ";");
 
             if (array_key_exists('globals', $configData)) {
-                $globalsBucket->pushGlobals($configData['globals']);
+                $buckets->getGlobalsBucket()->pushGlobals($configData['globals']);
             }
         }
 
-        $output = $this->walkNode($template, new State($this->wrapContext($context), $document, $styleBucket));
+        $output = $this->walkNode($template, new State($this->wrapContext($context), $document, $buckets));
 
         return [
             'html' => $output->innerHTML,
             'node' => $output->children[0],
-            'stylesheet' => $styleBucket->buildStyleSheet(),
-            'globals' => $globalsBucket->getGlobals()
+            'stylesheet' => $buckets->getStyleBucket()->build(),
+            'globals' => $buckets->getGlobalsBucket()->getGlobals(),
+            'script' => $buckets->getScriptsBucket()->build()
         ];
     }
 
@@ -336,7 +333,7 @@ class Stamper
                     $output = $this->render($this->componentRegistry[$node->tagName], [
                         'props' => $props,
                         'children' => $children
-                    ], $state->styleBucket);
+                    ], $state->buckets);
 
                     return (new Adopter())->adopt($state->doc, $output['node']);
                 }
